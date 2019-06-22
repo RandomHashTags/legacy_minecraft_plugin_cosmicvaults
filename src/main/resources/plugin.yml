@@ -1,0 +1,9 @@
+name: CosmicVaults
+version: ${project.version}
+main: me.randomhashtags.cosmicvaults.CosmicVaults
+author: RandomHashTags
+api-version: 1.13
+commands:
+  playervault:
+    description: Allows players to view their vaults
+    aliases: [pvs, pv]

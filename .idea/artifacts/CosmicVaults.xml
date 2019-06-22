@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="CosmicVaults">
+    <output-path>$PROJECT_DIR$/../../../My Modded Survival Server/1.14.2/plugins</output-path>
+    <root id="archive" name="CosmicVaults.jar">
+      <element id="module-output" name="CosmicVaults" />
+    </root>
+  </artifact>
+</component>
