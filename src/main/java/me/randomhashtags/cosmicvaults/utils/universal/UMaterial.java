@@ -1590,7 +1590,7 @@ public enum UMaterial {
         if(item != null) {
             final String n = item.getType().name(), v = Bukkit.getVersion();
             if(!v.contains("1.8") && !v.contains("1.9") && !v.contains("1.10") && !v.contains("1.11") && !v.contains("1.12")) {
-                return match(n);
+                return n.contains("SPAWN_EGG") ? matchSpawnEgg(item) : n.contains("ENCHANTED_BOOK") ? matchEnchantedBook(item) : n.contains("POTION") ? matchPotion(item, PotionBase.valueOf(n.contains("SPLASH") ? "SPLASH" : n.contains("LINGERING") ? "LINGERING" : "NORMAL")) : match(n);
             }
             final byte d = n.equals("FLINT_AND_STEEL") ? 0 : item.getData().getData();
             final UMaterial u = match(n, d);

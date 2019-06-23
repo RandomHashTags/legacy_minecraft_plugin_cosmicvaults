@@ -58,9 +58,9 @@ public class CVPlayer {
     public void backup() {
         yml.set("name", Bukkit.getOfflinePlayer(uuid).getName());
 
-        yml.set("vaults", null);
         final HashMap<Integer, UInventory> vaults = getVaults();
         final HashMap<Integer, ItemStack> displays = getVaultDisplays();
+        yml.set("vaults", null);
         for(int i : displays.keySet()) {
             final ItemStack is = displays.get(i);
             final ItemMeta meta = is.getItemMeta();

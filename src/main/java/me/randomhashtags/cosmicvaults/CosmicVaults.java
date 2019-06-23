@@ -6,6 +6,7 @@ import me.randomhashtags.cosmicvaults.utils.universal.UMaterial;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -36,8 +37,10 @@ import java.util.Random;
 public final class CosmicVaults extends JavaPlugin implements CommandExecutor, Listener {
 
     public static CosmicVaults getPlugin;
-    private String prefix, menuTitle;
+    private String prefix, menuTitle, otherPvs;
     private HashMap<Player, Integer> editing, editingName, editingIcon;
+    private HashMap<Player, CVPlayer> editingOther;
+    private HashMap<Player, Integer> editingOtherVault, editingOtherIcon;
     public ItemStack defaultPvsDisplay;
 
     private UInventory editIcon;
@@ -55,9 +58,13 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
         editing = new HashMap<>();
         editingName = new HashMap<>();
         editingIcon = new HashMap<>();
+        editingOther = new HashMap<>();
+        editingOtherVault = new HashMap<>();
+        editingOtherIcon = new HashMap<>();
 
         defaultPvsDisplay = d(config, "CosmicVaults.default pvs display");
         menuTitle = ChatColor.translateAlternateColorCodes('&', config.getString("CosmicVaults.titles.pvs"));
+        otherPvs = ChatColor.translateAlternateColorCodes('&', config.getString("CosmicVaults.titles.other pvs"));
 
         editIcon = new UInventory(null, config.getInt("edit icon.size"), ChatColor.translateAlternateColorCodes('&', config.getString("edit icon.title")));
         final ConfigurationSection c = config.getConfigurationSection("edit icon");
@@ -96,23 +103,55 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
         for(Player p : new ArrayList<>(editingIcon.keySet())) {
             p.closeInventory();
         }
+        for(Player p : new ArrayList<>(editingOther.keySet())) {
+            p.closeInventory();
+        }
         CVPlayer.unloadAllPlayerData();
     }
 
     public boolean onCommand(CommandSender sender, Command cmd, String commandLabel, String[] args) {
         final Player player = sender instanceof Player ? (Player) sender : null;
         if(player != null) {
-            if(args.length == 0) {
+            final int l = args.length;
+            if(l == 0) {
                 viewMenu(player);
             } else {
-                final int v = getRemainingInt(args[0]);
-                if(v > 0 &&  v <= CVPlayer.get(player.getUniqueId()).getMaxVaultPerms()) {
-                    viewVault(player, v);
-                } else {
-                    final HashMap<String, String> replacements = new HashMap<>();
-                    replacements.put("{PREFIX}", prefix);
-                    replacements.put("{VAULT_NUMBER}", Integer.toString(v));
-                    sendStringListMessage(player, config.getStringList("messages.no vault access"), replacements);
+                final String a = args[0];
+                final HashMap<String, String> replacements = new HashMap<>();
+                replacements.put("{PREFIX}", prefix);
+                if(l == 1) {
+                    final int v = getRemainingInt(a);
+                    if(v < 0) {
+                        final OfflinePlayer o = Bukkit.getOfflinePlayer(a);
+                        if(o == null) {
+                            sendStringListMessage(player, config.getStringList("messages.target player has no vaults"), replacements);
+                        } else {
+                            viewOtherMenu(player, CVPlayer.get(o.getUniqueId()));
+                        }
+                    } else if(v <= CVPlayer.get(player.getUniqueId()).getMaxVaultPerms()) {
+                        viewVault(player, v);
+                    } else {
+                        replacements.put("{VAULT_NUMBER}", Integer.toString(v));
+                        sendStringListMessage(player, config.getStringList("messages.no vault access"), replacements);
+                    }
+                } else if(l == 2) {
+                    final OfflinePlayer o = Bukkit.getOfflinePlayer(a);
+                    if(o == null) {
+                        sendStringListMessage(player, config.getStringList("messages.target player has no vaults"), replacements);
+                    } else {
+                        final CVPlayer pdata = CVPlayer.get(o.getUniqueId());
+                        pdata.load();
+                        final HashMap<Integer, UInventory> vaults = pdata.getVaults();
+                        if(vaults.size() == 0) {
+                            sendStringListMessage(player, config.getStringList("messages.target player has no vaults"), replacements);
+                        } else {
+                            final int v = getRemainingInt(args[1]);
+                            final UInventory vault = vaults.getOrDefault(v, null);
+                            if(vault != null) {
+                                viewOtherVault(player, pdata, vault, v);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -123,6 +162,21 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
     }
     public String getDefaultVaultTitle() {
         return ChatColor.translateAlternateColorCodes('&', config.getString("CosmicVaults.titles.self"));
+    }
+    public void viewOtherMenu(Player player, CVPlayer target) {
+        if(hasPermission(player, "CosmicVaults.pv.other.edit")) {
+            target.load();
+            player.closeInventory();
+            final HashMap<Integer, UInventory> vaults = target.getVaults();
+            final int s = vaults.size(), size = s > 54 ? 54 : s%9 == 0 && s > 0 ? s : ((s+9)/9)*9;
+            player.openInventory(Bukkit.createInventory(player, size, otherPvs.replace("{PLAYER}", Bukkit.getOfflinePlayer(target.getUUID()).getName())));
+            final Inventory top = player.getOpenInventory().getTopInventory();
+            for(int i = 0; i < s && i < config.getInt("CosmicVaults.max size of pvs display"); i++) {
+                top.setItem(i, target.getDisplay(i+1));
+            }
+            player.updateInventory();
+            editingOther.put(player, target);
+        }
     }
     public void viewMenu(Player player) {
         if(hasPermission(player, "CosmicVaults.playervaults")) {
@@ -138,6 +192,18 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
             player.updateInventory();
         }
     }
+    public void viewOtherVault(Player player, CVPlayer target, UInventory vault, int vaultNumber) {
+        if(hasPermission(player, "CosmicVaults.pv.other.view")) {
+            player.closeInventory();
+            player.openInventory(vault.getInventory());
+            editingOther.put(player, target);
+            editingOtherVault.put(player, vaultNumber);
+        } else {
+            final HashMap<String, String> replacements = new HashMap<>();
+            replacements.put("{PREFIX}", prefix);
+            sendStringListMessage(player, config.getStringList("messages.no permission to view other vault"), replacements);
+        }
+    }
     public void viewVault(Player player, int number) {
         if(hasPermission(player, "CosmicVaults.pv." + number)) {
             final CVPlayer vaults = CVPlayer.get(player.getUniqueId());
@@ -148,8 +214,8 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
             editing.put(player, number);
         }
     }
-    public void saveVault(Player player, int vault, Inventory inventory) {
-        CVPlayer.get(player.getUniqueId()).getVaults().get(vault).getInventory().setContents(inventory.getContents());
+    public void setVaultContents(OfflinePlayer player, int vault, ItemStack[] contents) {
+        CVPlayer.get(player.getUniqueId()).getVaults().get(vault).getInventory().setContents(contents);
     }
 
     private boolean hasPermission(CommandSender sender, String permission) {
@@ -203,7 +269,7 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
     private void inventoryCloseEvent(InventoryCloseEvent event) {
         final Player player = (Player) event.getPlayer();
         if(editing.containsKey(player)) {
-            saveVault(player, editing.get(player), event.getInventory());
+            setVaultContents(player, editing.get(player), event.getInventory().getContents());
             editing.remove(player);
             if(config.getBoolean("CosmicVaults.open menu when.closed self player vault")) {
                 Bukkit.getScheduler().scheduleSyncDelayedTask(this, () -> viewMenu(player), 1);
@@ -213,6 +279,19 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
             if(config.getBoolean("CosmicVaults.open menu when.closed edit icon")) {
                 Bukkit.getScheduler().scheduleSyncDelayedTask(this, () -> viewMenu(player), 1);
             }
+        } else if(editingOther.containsKey(player)) {
+            if(hasPermission(player, "CosmicVaults.pv.other.edit")) {
+                final CVPlayer t = editingOther.get(player);
+                final OfflinePlayer target = t.getOfflinePlayer();
+                final boolean vault = editingOtherVault.containsKey(player);
+                if(vault) {
+                    setVaultContents(target, editingOtherVault.get(player), event.getInventory().getContents());
+                }
+                if(!target.isOnline()) t.unload();
+            }
+            editingOther.remove(player);
+            editingOtherVault.remove(player);
+            editingOtherIcon.remove(player);
         }
     }
     @EventHandler
@@ -248,6 +327,24 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
                 replacements.put("{VAULT_NUMBER}", Integer.toString(vault));
                 replacements.put("{MATERIAL}", material.name());
                 sendStringListMessage(player, config.getStringList("messages.save edited icon"), replacements);
+            } else if(editingOther.containsKey(player)) {
+                final int r = event.getRawSlot();
+                if(r < 0) return;
+                final CVPlayer pdata = editingOther.get(player);
+                final boolean edit = editingOtherVault.containsKey(player), icon = editingOtherIcon.containsKey(player);
+                final String perm = edit ? "CosmicVaults.pv.other.edit" : icon ? "CosmicVaults.pv.other.edit.icon" : "CosmicVaults.pv.other.view";
+                if(!hasPermission(player, perm)) {
+                    event.setCancelled(true);
+                    player.updateInventory();
+                    final HashMap<String, String> replacements = new HashMap<>();
+                    replacements.put("{PREFIX}", prefix);
+                    sendStringListMessage(player, config.getStringList("messages.no permission to " + (edit ? "edit other vault" : icon ? "edit other vault icon" : "view other vault")), null);
+                    return;
+                }
+                if(!edit && !icon) { // menu
+                    player.closeInventory();
+                    viewOtherVault(player, pdata, pdata.getVaults().get(r+1), r+1);
+                }
             }
         }
     }
