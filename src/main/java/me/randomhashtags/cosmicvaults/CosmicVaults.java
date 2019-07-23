@@ -3,6 +3,7 @@ package me.randomhashtags.cosmicvaults;
 import me.randomhashtags.cosmicvaults.utils.CVPlayer;
 import me.randomhashtags.cosmicvaults.utils.universal.UInventory;
 import me.randomhashtags.cosmicvaults.utils.universal.UMaterial;
+import me.randomhashtags.cosmicvaults.utils.universal.UVersion;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -412,13 +413,23 @@ public final class CosmicVaults extends JavaPlugin implements CommandExecutor, L
                     final HashMap<Enchantment, Integer> enchants = new HashMap<>();
                     List<String> lore = new ArrayList<>();
                     if(config != null && config.get(path + ".lore") != null) {
+                        final UVersion uv = UVersion.getUVersion();
                         for(String string : config.getStringList(path + ".lore")) {
-                            lore.add(ChatColor.translateAlternateColorCodes('&', string));
+                            if(string.toLowerCase().startsWith("venchants{")) {
+                                for(String s : string.split("\\{")[1].split("}")[0].split(";")) {
+                                    enchants.put(uv.getEnchantment(s), getRemainingInt(s));
+                                }
+                            } else {
+                                lore.add(ChatColor.translateAlternateColorCodes('&', string));
+                            }
                         }
                     }
                     (!i.equals(skullitem) ? itemMeta : m).setLore(lore);
                     item.setItemMeta(!item.getType().equals(skullitem) ? itemMeta : m);
                     if(enchanted) item.addUnsafeEnchantment(Enchantment.ARROW_DAMAGE, 1);
+                    if(config != null && config.get(path + ".durability") != null) {
+                        item.setDurability((short) config.getInt(path + ".durability"));
+                    }
                     for(Enchantment enchantment : enchants.keySet()) {
                         if(enchantment != null) {
                             item.addUnsafeEnchantment(enchantment, enchants.get(enchantment));

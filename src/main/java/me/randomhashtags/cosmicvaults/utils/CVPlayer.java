@@ -9,6 +9,7 @@ import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -82,10 +83,24 @@ public class CVPlayer {
                     final UMaterial um = UMaterial.match(is);
                     yml.set("vaults." + i + ".items." + a + ".item", um.name());
                     yml.set("vaults." + i + ".items." + a + ".amount", is.getAmount());
+                    final short dura = is.getDurability();
+                    if(dura != 0) yml.set("vaults." + i + ".items." + a + ".durability", dura);
                     if(is.hasItemMeta()) {
                         final ItemMeta m = is.getItemMeta();
                         if(m.hasDisplayName()) yml.set("vaults." + i + ".items." + a + ".name", m.getDisplayName());
-                        if(m.hasLore()) yml.set("vaults." + i + ".items." + a + ".lore", m.getLore());
+                        final List<String> l = new ArrayList<>();
+                        if(m.hasEnchants()) {
+                            String b = "VEnchants{";
+                            final Map<Enchantment, Integer> enchants = m.getEnchants();
+                            final int es = enchants.size();
+                            for(int s = 0; s < es; s++) {
+                                final Enchantment e = (Enchantment) enchants.keySet().toArray()[s];
+                                b = b.concat(e.getName() + enchants.get(e) + (s != es-1 ? ";" : ""));
+                            }
+                            l.add(b + "}");
+                        }
+                        if(m.hasLore()) l.addAll(m.getLore());
+                        if(!l.isEmpty()) yml.set("vaults." + i + ".items." + a + ".lore", l);
                     }
                 }
             }
