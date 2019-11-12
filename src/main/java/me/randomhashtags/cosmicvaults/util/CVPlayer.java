@@ -1,15 +1,15 @@
-package me.randomhashtags.cosmicvaults.utils;
+package me.randomhashtags.cosmicvaults.util;
 
 import me.randomhashtags.cosmicvaults.CosmicVaults;
-import me.randomhashtags.cosmicvaults.utils.universal.UInventory;
-import me.randomhashtags.cosmicvaults.utils.universal.UMaterial;
+import me.randomhashtags.cosmicvaults.CosmicVaultsAPI;
+import me.randomhashtags.cosmicvaults.util.universal.UInventory;
+import me.randomhashtags.cosmicvaults.util.universal.UMaterial;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -19,16 +19,19 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
+import static java.io.File.separator;
+
 public class CVPlayer {
-    private static final String s = File.separator, folder = CosmicVaults.getPlugin.getDataFolder() + s + "_player data";
+    private static final String folder = CosmicVaults.getPlugin.getDataFolder() + separator + "_player data";
     public static final HashMap<UUID, CVPlayer> players = new HashMap<>();
-    private static final CosmicVaults api = CosmicVaults.getPlugin;
+    private static final CosmicVaultsAPI api = CosmicVaultsAPI.getCosmicVaultsAPI();
 
     private UUID uuid;
-    public File file = null;
-    private YamlConfiguration yml = null;
+    private File file;
+    private YamlConfiguration yml;
 
     private boolean isLoaded = false;
+    private HashMap<Integer, PlayerVault> vaultz;
     private HashMap<Integer, UInventory> vaults;
     private HashMap<Integer, ItemStack> vaultDisplay;
 
@@ -55,7 +58,7 @@ public class CVPlayer {
         }
         if(backup) backup();
     }
-    public static CVPlayer get(UUID player) { return players.getOrDefault(player, new CVPlayer(player)); }
+    public static CVPlayer get(UUID player) { return players.getOrDefault(player, new CVPlayer(player)).load(); }
     public void backup() {
         yml.set("name", Bukkit.getOfflinePlayer(uuid).getName());
 
@@ -80,28 +83,7 @@ public class CVPlayer {
             for(int a = 0; a < size; a++) {
                 final ItemStack is = inv.getItem(a);
                 if(is != null) {
-                    final UMaterial um = UMaterial.match(is);
-                    yml.set("vaults." + i + ".items." + a + ".item", um.name());
-                    yml.set("vaults." + i + ".items." + a + ".amount", is.getAmount());
-                    final short dura = is.getDurability();
-                    if(dura != 0) yml.set("vaults." + i + ".items." + a + ".durability", dura);
-                    if(is.hasItemMeta()) {
-                        final ItemMeta m = is.getItemMeta();
-                        if(m.hasDisplayName()) yml.set("vaults." + i + ".items." + a + ".name", m.getDisplayName());
-                        final List<String> l = new ArrayList<>();
-                        if(m.hasEnchants()) {
-                            String b = "VEnchants{";
-                            final Map<Enchantment, Integer> enchants = m.getEnchants();
-                            final int es = enchants.size();
-                            for(int s = 0; s < es; s++) {
-                                final Enchantment e = (Enchantment) enchants.keySet().toArray()[s];
-                                b = b.concat(e.getName() + enchants.get(e) + (s != es-1 ? ";" : ""));
-                            }
-                            l.add(b + "}");
-                        }
-                        if(m.hasLore()) l.addAll(m.getLore());
-                        if(!l.isEmpty()) yml.set("vaults." + i + ".items." + a + ".lore", l);
-                    }
+                    yml.set("vaults." + i + ".items." + a, is.toString());
                 }
             }
         }
@@ -118,12 +100,7 @@ public class CVPlayer {
         if(isLoaded) {
             backup();
             isLoaded = false;
-            file = null;
-            yml = null;
             players.remove(uuid);
-            uuid = null;
-            vaults = null;
-            vaultDisplay = null;
         }
     }
 
@@ -141,43 +118,42 @@ public class CVPlayer {
         }
         return a;
     }
-    private void loadVaults() {
-        if(vaults == null) vaults = new HashMap<>();
-        final CosmicVaults cv = CosmicVaults.getPlugin;
-        final int max = getMaxVaultPerms(), def = cv.getDefaultSizeOfVault();
-        final String deft = cv.getDefaultVaultTitle();
-        final Player player = Bukkit.getPlayer(uuid);
-        for(int i = 1; i <= max; i++) {
-            if(!vaults.containsKey(i)) {
-                vaults.put(i, new UInventory(player, yml.getInt("vaults." + i + ".size", def), yml.getString("vaults." + i + ".title", deft.replace("{VAULT_NUMBER}", Integer.toString(i)))));
+    public HashMap<Integer, UInventory> getVaults() {
+        if(vaults == null) {
+            vaultz = new HashMap<>(); // TODO
+            vaults = new HashMap<>();
+            final int max = getMaxVaultPerms(), def = api.getDefaultSizeOfVault();
+            final String deft = api.getDefaultVaultTitle();
+            final Player player = Bukkit.getPlayer(uuid);
+            for(int i = 1; i <= max; i++) {
+                final UInventory uinv = new UInventory(player, yml.getInt("vaults." + i + ".size", def), yml.getString("vaults." + i + ".title", deft.replace("{VAULT_NUMBER}", Integer.toString(i))));
+                vaultz.put(i, new PlayerVault(uinv, null, null));
+
+                vaults.put(i, uinv);
                 if(yml.get("vaults." + i + ".items") != null) {
                     final ConfigurationSection c = yml.getConfigurationSection("vaults." + i + ".items");
                     if(c != null) {
                         final Inventory inv = vaults.get(i).getInventory();
                         for(String s : c.getKeys(false)) {
-                            inv.setItem(Integer.parseInt(s), api.d(yml, "vaults." + i + ".items." + s));
+                            inv.setItem(Integer.parseInt(s), yml.getItemStack("vaults." + i + ".items." + s));
                         }
                     }
                 }
             }
         }
-    }
-    public HashMap<Integer, UInventory> getVaults() {
-        loadVaults();
         return vaults;
     }
     public UInventory getVault(int vault) {
-        loadVaults();
-        return vaults.getOrDefault(vault, null);
+        return getVaults().getOrDefault(vault, null);
     }
-    private void loadVaultDisplays() {
+    public HashMap<Integer, ItemStack> getVaultDisplays() {
         if(vaultDisplay == null) {
             vaultDisplay = new HashMap<>();
             final ItemStack is = api.defaultPvsDisplay;
             final List<String> lore = new ArrayList<>();
             for(int i = 1; i <= getMaxVaultPerms(); i++) {
                 if(yml.get("vaults." + i) != null) {
-                    vaultDisplay.put(i, api.d(yml, "vaults." + i + ".display"));
+                    vaultDisplay.put(i, yml.getItemStack("vaults." + i + ".display"));
                 } else {
                     final String v = Integer.toString(i);
                     final ItemStack item = is.clone();
@@ -194,14 +170,10 @@ public class CVPlayer {
                 }
             }
         }
-    }
-    public HashMap<Integer, ItemStack> getVaultDisplays() {
-        loadVaultDisplays();
         return vaultDisplay;
     }
     public ItemStack getDisplay(int vault) {
-        loadVaultDisplays();
-        return vaultDisplay.getOrDefault(vault, new ItemStack(Material.BARRIER));
+        return getVaultDisplays().getOrDefault(vault, new ItemStack(Material.BARRIER));
     }
     public void setDisplayName(int vault, String name) {
         final ItemStack is = getDisplay(vault);
@@ -241,7 +213,7 @@ public class CVPlayer {
     public static void loadAllPlayerData() {
         try {
             for(File f : new File(folder).listFiles()) {
-                CVPlayer.get(UUID.fromString(f.getName().split("\\.yml")[0])).load();
+                CVPlayer.get(UUID.fromString(f.getName().split("\\.yml")[0]));
             }
         } catch (Exception e) {
             e.printStackTrace();

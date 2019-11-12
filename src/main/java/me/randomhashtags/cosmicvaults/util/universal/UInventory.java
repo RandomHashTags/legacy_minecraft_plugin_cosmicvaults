@@ -1,4 +1,4 @@
-package me.randomhashtags.cosmicvaults.utils.universal;
+package me.randomhashtags.cosmicvaults.util.universal;
 
 import org.bukkit.Bukkit;
 import org.bukkit.event.inventory.InventoryType;

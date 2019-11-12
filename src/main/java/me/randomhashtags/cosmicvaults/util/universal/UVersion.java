@@ -1,16 +1,13 @@
-package me.randomhashtags.cosmicvaults.utils.universal;
+package me.randomhashtags.cosmicvaults.util.universal;
 
-import org.bukkit.*;
 import org.bukkit.enchantments.Enchantment;
 
-public class UVersion {
+public class UVersion implements UVersionable {
     private static UVersion instance;
     public static UVersion getUVersion() {
         if(instance == null) instance = new UVersion();
         return instance;
     }
-
-    public final String version = Bukkit.getVersion();
 
     public Enchantment getEnchantment(String string) {
         if(string != null) {
