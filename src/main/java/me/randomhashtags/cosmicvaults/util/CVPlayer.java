@@ -17,7 +17,10 @@ import org.bukkit.inventory.meta.ItemMeta;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
 
 import static java.io.File.separator;
 
@@ -31,8 +34,7 @@ public class CVPlayer {
     private YamlConfiguration yml;
 
     private boolean isLoaded = false;
-    private HashMap<Integer, PlayerVault> vaultz;
-    private HashMap<Integer, UInventory> vaults;
+    private HashMap<Integer, PlayerVault> vaults;
     private HashMap<Integer, ItemStack> vaultDisplay;
 
     public CVPlayer(UUID uuid) {
@@ -62,24 +64,16 @@ public class CVPlayer {
     public void backup() {
         yml.set("name", Bukkit.getOfflinePlayer(uuid).getName());
 
-        final HashMap<Integer, UInventory> vaults = getVaults();
-        final HashMap<Integer, ItemStack> displays = getVaultDisplays();
+        final HashMap<Integer, PlayerVault> vaults = getVaults();
         yml.set("vaults", null);
-        for(int i : displays.keySet()) {
-            final ItemStack is = displays.get(i);
-            final ItemMeta meta = is.getItemMeta();
-            final UMaterial m = UMaterial.match(is);
-            yml.set("vaults." + i + ".display.item", m.name());
-            yml.set("vaults." + i + ".display.amount", is.getAmount());
-            if(meta.hasDisplayName()) yml.set("vaults." + i + ".display.name", meta.getDisplayName());
-            if(meta.hasLore()) yml.set("vaults." + i + ".display.lore", meta.getLore());
-        }
         for(int i : vaults.keySet()) {
-            final UInventory u = vaults.get(i);
+            final PlayerVault vault = vaults.get(i);
+            final UInventory u = vault.getUInventory();
             final Inventory inv = u.getInventory();
             final int size = u.getSize();
             yml.set("vaults." + i + ".size", size);
             yml.set("vaults." + i + ".title", u.getTitle());
+            yml.set("vaults." + i + ".display", vault.getDisplay().toString());
             for(int a = 0; a < size; a++) {
                 final ItemStack is = inv.getItem(a);
                 if(is != null) {
@@ -118,82 +112,48 @@ public class CVPlayer {
         }
         return a;
     }
-    public HashMap<Integer, UInventory> getVaults() {
+    public HashMap<Integer, PlayerVault> getVaults() {
         if(vaults == null) {
-            vaultz = new HashMap<>(); // TODO
             vaults = new HashMap<>();
             final int max = getMaxVaultPerms(), def = api.getDefaultSizeOfVault();
             final String deft = api.getDefaultVaultTitle();
             final Player player = Bukkit.getPlayer(uuid);
             for(int i = 1; i <= max; i++) {
-                final UInventory uinv = new UInventory(player, yml.getInt("vaults." + i + ".size", def), yml.getString("vaults." + i + ".title", deft.replace("{VAULT_NUMBER}", Integer.toString(i))));
-                vaultz.put(i, new PlayerVault(uinv, null, null));
+                final int size = yml.getInt("vaults." + i + ".size", def);
+                final UInventory uinv = new UInventory(player, size, yml.getString("vaults." + i + ".title", deft.replace("{VAULT_NUMBER}", Integer.toString(i))));
+                final ItemStack display = yml.getItemStack("vaults." + i + ".display", new ItemStack(Material.EMERALD));
+                final PlayerVault vault = new PlayerVault(uinv, display);
 
-                vaults.put(i, uinv);
+                final ItemStack[] contents = new ItemStack[size];
                 if(yml.get("vaults." + i + ".items") != null) {
                     final ConfigurationSection c = yml.getConfigurationSection("vaults." + i + ".items");
-                    if(c != null) {
-                        final Inventory inv = vaults.get(i).getInventory();
-                        for(String s : c.getKeys(false)) {
-                            inv.setItem(Integer.parseInt(s), yml.getItemStack("vaults." + i + ".items." + s));
-                        }
+                    for(String s : c.getKeys(false)) {
+                        contents[Integer.parseInt(s)] = yml.getItemStack("vaults." + i + ".items." + s);
                     }
                 }
+                vault.setContents(contents);
+                vaults.put(i, vault);
             }
         }
         return vaults;
     }
-    public UInventory getVault(int vault) {
+    public PlayerVault getVault(int vault) {
         return getVaults().getOrDefault(vault, null);
     }
-    public HashMap<Integer, ItemStack> getVaultDisplays() {
-        if(vaultDisplay == null) {
-            vaultDisplay = new HashMap<>();
-            final ItemStack is = api.defaultPvsDisplay;
-            final List<String> lore = new ArrayList<>();
-            for(int i = 1; i <= getMaxVaultPerms(); i++) {
-                if(yml.get("vaults." + i) != null) {
-                    vaultDisplay.put(i, yml.getItemStack("vaults." + i + ".display"));
-                } else {
-                    final String v = Integer.toString(i);
-                    final ItemStack item = is.clone();
-                    item.setAmount(i);
-                    final ItemMeta meta = item.getItemMeta();
-                    lore.clear();
-                    meta.setDisplayName(meta.getDisplayName().replace("{VAULT_NUMBER}", v));
-                    for(String s : meta.getLore()) {
-                        lore.add(s.replace("{VAULT_NUMBER}", v));
-                    }
-                    meta.setLore(lore);
-                    item.setItemMeta(meta);
-                    vaultDisplay.put(i, item);
-                }
-            }
-        }
-        return vaultDisplay;
+    public ItemStack getVaultDisplay(int vault) {
+        final PlayerVault v = getVault(vault);
+        return v != null ? v.getDisplay() : null;
     }
-    public ItemStack getDisplay(int vault) {
-        return getVaultDisplays().getOrDefault(vault, new ItemStack(Material.BARRIER));
-    }
-    public void setDisplayName(int vault, String name) {
-        final ItemStack is = getDisplay(vault);
-        final ItemMeta m = is.getItemMeta();
-        m.setDisplayName(ChatColor.translateAlternateColorCodes('&', name));
-        is.setItemMeta(m);
-    }
-    public void setIcon(int vault, UMaterial icon) {
-        final ItemStack is = getDisplay(vault), d = icon.getItemStack();
-        d.setItemMeta(is.getItemMeta());
-        vaultDisplay.put(vault, d);
-    }
-    public void setVaults(HashMap<Integer, UInventory> vaults) {
+    public void setVaults(HashMap<Integer, PlayerVault> vaults) {
         this.vaults = vaults;
     }
     public ItemStack[] getVaultItems(int vault) {
         return vaults.containsKey(vault) ? vaults.get(vault).getInventory().getContents() : null;
     }
-    public void setVaultItems(int vault, ItemStack[] items) {
-        if(!vaults.containsKey(vault)) vaults.put(vault, new UInventory(null, 54, "Vault #" + vault));
+    public void setVaultContents(int vault, ItemStack[] items) {
+        if(!vaults.containsKey(vault)) {
+            vaults.put(vault, new PlayerVault(new UInventory(null, 54, "Vault #" + vault), null));
+        }
         vaults.get(vault).getInventory().setContents(items);
     }
 

@@ -2,6 +2,7 @@ package me.randomhashtags.cosmicvaults;
 
 import com.sun.istack.internal.NotNull;
 import me.randomhashtags.cosmicvaults.util.CVPlayer;
+import me.randomhashtags.cosmicvaults.util.PlayerVault;
 import me.randomhashtags.cosmicvaults.util.universal.UInventory;
 import me.randomhashtags.cosmicvaults.util.universal.UMaterial;
 import me.randomhashtags.cosmicvaults.util.universal.UVersion;
@@ -85,12 +86,12 @@ public final class CosmicVaultsAPI implements CommandExecutor, Listener, UVersio
                             sendStringListMessage(player, config.getStringList("messages.target player has no vaults"), replacements);
                         } else {
                             final CVPlayer pdata = CVPlayer.get(o.getUniqueId());
-                            final HashMap<Integer, UInventory> vaults = pdata.getVaults();
+                            final HashMap<Integer, PlayerVault> vaults = pdata.getVaults();
                             if(vaults.size() == 0) {
                                 sendStringListMessage(player, config.getStringList("messages.target player has no vaults"), replacements);
                             } else {
                                 v = getRemainingInt(args[1]);
-                                final UInventory vault = vaults.getOrDefault(v, null);
+                                final PlayerVault vault = vaults.getOrDefault(v, null);
                                 if(vault != null) {
                                     viewOtherVault(player, pdata, vault, v);
                                 }
@@ -171,12 +172,12 @@ public final class CosmicVaultsAPI implements CommandExecutor, Listener, UVersio
     public void viewOtherMenu(@NotNull Player player, @NotNull CVPlayer target) {
         if(hasPermission(player, "CosmicVaults.pv.other.edit")) {
             player.closeInventory();
-            final HashMap<Integer, UInventory> vaults = target.getVaults();
+            final HashMap<Integer, PlayerVault> vaults = target.getVaults();
             final int s = vaults.size(), size = s > 54 ? 54 : s%9 == 0 && s > 0 ? s : ((s+9)/9)*9;
             player.openInventory(Bukkit.createInventory(player, size, otherPvs.replace("{PLAYER}", Bukkit.getOfflinePlayer(target.getUUID()).getName())));
             final Inventory top = player.getOpenInventory().getTopInventory();
             for(int i = 0; i < s && i < config.getInt("CosmicVaults.max size of pvs display"); i++) {
-                top.setItem(i, target.getDisplay(i+1));
+                top.setItem(i, target.getVaultDisplay(i+1));
             }
             player.updateInventory();
             editingOther.put(player, target);
@@ -186,17 +187,17 @@ public final class CosmicVaultsAPI implements CommandExecutor, Listener, UVersio
         if(hasPermission(player, "CosmicVaults.playervaults")) {
             player.closeInventory();
             final CVPlayer pdata = CVPlayer.get(player.getUniqueId());
-            final HashMap<Integer, UInventory> vaults = pdata.getVaults();
+            final HashMap<Integer, PlayerVault> vaults = pdata.getVaults();
             final int s = vaults.size(), size = s > 54 ? 54 : s%9 == 0 && s > 0 ? s : ((s+9)/9)*9;
             player.openInventory(Bukkit.createInventory(player, size, menuTitle));
             final Inventory top = player.getOpenInventory().getTopInventory();
             for(int i = 0; i < s && i < config.getInt("CosmicVaults.max size of pvs display"); i++) {
-                top.setItem(i, pdata.getDisplay(i+1));
+                top.setItem(i, pdata.getVaultDisplay(i+1));
             }
             player.updateInventory();
         }
     }
-    public void viewOtherVault(Player player, CVPlayer target, UInventory vault, int vaultNumber) {
+    public void viewOtherVault(Player player, CVPlayer target, PlayerVault vault, int vaultNumber) {
         if(hasPermission(player, "CosmicVaults.pv.other.view")) {
             player.closeInventory();
             player.openInventory(vault.getInventory());
@@ -211,7 +212,7 @@ public final class CosmicVaultsAPI implements CommandExecutor, Listener, UVersio
     public void viewVault(Player player, int number) {
         if(hasPermission(player, "CosmicVaults.pv." + number)) {
             final CVPlayer vaults = CVPlayer.get(player.getUniqueId());
-            final UInventory vault = vaults.getVault(number);
+            final PlayerVault vault = vaults.getVault(number);
             player.closeInventory();
             player.openInventory(vault.getInventory());
             player.updateInventory();
@@ -240,7 +241,14 @@ public final class CosmicVaultsAPI implements CommandExecutor, Listener, UVersio
             if(s.equals("cancel")) {
                 sendStringListMessage(player, config.getStringList("messages.rename vault cancelled"), replacements);
             } else {
-                CVPlayer.get(player.getUniqueId()).setDisplayName(vault, s);
+                final CVPlayer pdata = CVPlayer.get(player.getUniqueId());
+                final PlayerVault v = pdata.getVault(vault);
+                final ItemStack display = v.getDisplay();
+                final ItemMeta m = display.getItemMeta();
+                m.setDisplayName(s);;
+                display.setItemMeta(m);
+                v.setDisplay(display);
+
                 sendStringListMessage(player, config.getStringList("messages.rename vault success"), replacements);
             }
             if(config.getBoolean("CosmicVaults.open menu when.rename vault")) {
@@ -307,7 +315,7 @@ public final class CosmicVaultsAPI implements CommandExecutor, Listener, UVersio
                 }
             } else if(isEditingIcon) {
                 final UMaterial material = UMaterial.match(c);
-                CVPlayer.get(player.getUniqueId()).setIcon(vault, material);
+                CVPlayer.get(player.getUniqueId()).getVault(vault).setDisplayMaterial(material);
                 player.closeInventory();
                 final HashMap<String, String> replacements = new HashMap<>();
                 replacements.put("{PREFIX}", prefix);
